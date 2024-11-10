@@ -1,181 +1,170 @@
+
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Real-time User Recommendation Graph</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time User Recommendation Graph - Dracula Theme</title>
     <script src="https://d3js.org/d3.v6.min.js"></script>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        height: 100vh;
-      }
-      #graph-container {
-        width: 100vw;
-        height: 90vh;
-      }
-      #legend {
-        width: 100%;
-        text-align: center;
-        padding: 10px;
-        font-size: 14px;
-        background-color: #f9f9f9;
-        border-top: 1px solid #ddd;
-      }
-      .node-label {
-        font-size: 10px;
-        fill: #717171;
-        pointer-events: none;
-      }
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            height: 100vh; 
+            background-color: #282a36; /* Dracula background color */
+            color: #f8f8f2; /* Dracula foreground color */
+        }
+        #graph-container { 
+            width: 100vw; 
+            height: 90vh; 
+        }
+        #legend { 
+            width: 100%; 
+            text-align: center; 
+            padding: 10px; 
+            font-size: 14px; 
+            background-color: #44475a; /* Dracula darker background */
+            color: #f8f8f2; /* Light text color */
+            border-top: 1px solid #6272a4; /* Border to match Dracula theme */
+        }
+        .node-label { 
+            font-size: 10px; 
+            fill: #f8f8f2; /* Light text color for readability */
+            pointer-events: none; 
+        }
     </style>
-  </head>
-  <body>
+</head>
+<body>
+
     <div id="graph-container"></div>
-    <div id="legend">
-      Nodes represent users, and links represent recommendations between users.
-    </div>
+    <div id="legend">Nodes represent users, and links represent recommendations between users.</div>
 
     <script>
-      // Data for D3.js graph
-      const nodes = [];
-      const links = [];
+        // Data for D3.js graph
+        const nodes = [];
+        const links = [];
 
-      // Setup D3.js force-directed graph
-      const width = window.innerWidth,
-        height = window.innerHeight * 0.9;
-      const svg = d3
-        .select("#graph-container")
-        .append("svg")
-        .attr("width", width)
-        .attr("height", height);
+        // Setup D3.js force-directed graph
+        const width = window.innerWidth, height = window.innerHeight * 0.9;
+        const svg = d3.select("#graph-container").append("svg")
+            .attr("width", width)
+            .attr("height", height);
 
-      const simulation = d3
-        .forceSimulation(nodes)
-        .force(
-          "link",
-          d3
-            .forceLink(links)
-            .distance(100)
-            .id((d) => d.id)
-        )
-        .force("charge", d3.forceManyBody().strength(-300))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .on("tick", ticked);
+        const simulation = d3.forceSimulation(nodes)
+            .force("link", d3.forceLink(links).distance(100).id(d => d.id))
+            .force("charge", d3.forceManyBody().strength(-300))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .on("tick", ticked);
 
-      let link = svg
-        .append("g")
-        .attr("stroke", "#999")
-        .attr("stroke-opacity", 0.6)
-        .selectAll("line");
+        let link = svg.append("g")
+            .attr("stroke", "#6272a4") /* Dracula link color */
+            .attr("stroke-opacity", 0.6)
+            .selectAll("line");
 
-      let node = svg
-        .append("g")
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 1.5)
-        .selectAll("circle");
+        let node = svg.append("g")
+            .attr("stroke", "#f8f8f2") /* Light outline color for nodes */
+            .attr("stroke-width", 1.5)
+            .selectAll("circle");
 
-      let labels = svg.append("g").selectAll("text");
+        let labels = svg.append("g")
+            .selectAll("text");
 
-      function updateGraph() {
-        // Update links
-        link = link.data(links);
-        link.exit().remove();
-        link = link.enter().append("line").merge(link);
+        function updateGraph() {
+            // Update links
+            link = link.data(links);
+            link.exit().remove();
+            link = link.enter().append("line").merge(link);
 
-        // Update nodes
-        node = node.data(nodes, (d) => d.id);
-        node.exit().remove();
-        node = node
-          .enter()
-          .append("circle")
-          .attr("r", 8)
-          .attr("fill", "steelblue")
-          .merge(node)
-          .call(drag(simulation));
+            // Update nodes
+            node = node.data(nodes, d => d.id);
+            node.exit().remove();
+            node = node.enter().append("circle")
+                .attr("r", 8)
+                .attr("fill", "#50fa7b") /* Dracula green color for nodes */
+                .merge(node)
+                .call(drag(simulation));
 
-        // Update labels
-        labels = labels.data(nodes, (d) => d.id);
-        labels.exit().remove();
-        labels = labels
-          .enter()
-          .append("text")
-          .attr("class", "node-label")
-          .attr("dy", -10)
-          .attr("text-anchor", "middle")
-          .text((d) => `User ${d.id}`)
-          .merge(labels);
+            // Update labels
+            labels = labels.data(nodes, d => d.id);
+            labels.exit().remove();
+            labels = labels.enter().append("text")
+                .attr("class", "node-label")
+                .attr("dy", -10)
+                .attr("text-anchor", "middle")
+                .text(d => `User ${d.id}`)
+                .merge(labels);
 
-        simulation.nodes(nodes);
-        simulation.force("link").links(links);
-        simulation.alpha(1).restart();
-      }
-
-      function ticked() {
-        link
-          .attr("x1", (d) => d.source.x)
-          .attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x)
-          .attr("y2", (d) => d.target.y);
-
-        node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
-
-        labels.attr("x", (d) => d.x).attr("y", (d) => d.y);
-      }
-
-      function drag(simulation) {
-        function dragstarted(event, d) {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
-          d.fx = d.x;
-          d.fy = d.y;
+            simulation.nodes(nodes);
+            simulation.force("link").links(links);
+            simulation.alpha(1).restart();
         }
 
-        function dragged(event, d) {
-          d.fx = event.x;
-          d.fy = event.y;
+        function ticked() {
+            link.attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+
+            node.attr("cx", d => d.x)
+                .attr("cy", d => d.y);
+
+            labels.attr("x", d => d.x)
+                .attr("y", d => d.y);
         }
 
-        function dragended(event, d) {
-          if (!event.active) simulation.alphaTarget(0);
-          d.fx = null;
-          d.fy = null;
+        function drag(simulation) {
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x;
+                d.fy = d.y;
+            }
+
+            function dragged(event, d) {
+                d.fx = event.x;
+                d.fy = event.y;
+            }
+
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null;
+                d.fy = null;
+            }
+
+            return d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended);
         }
 
-        return d3
-          .drag()
-          .on("start", dragstarted)
-          .on("drag", dragged)
-          .on("end", dragended);
-      }
+        // Connect to WebSocket
+        const socket = new WebSocket("ws://localhost:8000/ws/recommendations");
 
-      // Connect to WebSocket
-      const socket = new WebSocket("ws://localhost:8000/ws/recommendations");
+        // Handle incoming WebSocket messages
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const { user_id, recommendations } = data;
 
-      // Handle incoming WebSocket messages
-      socket.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        const { user_id, recommendations } = data;
+            // Add user node if it doesn't exist
+            if (!nodes.find(node => node.id === user_id)) {
+                nodes.push({ id: user_id });
+            }
 
-        // Add user node if it doesn't exist
-        if (!nodes.find((node) => node.id === user_id)) {
-          nodes.push({ id: user_id });
-        }
+            // Add recommended users as nodes and links
+            recommendations.forEach(recommended_id => {
+                if (!nodes.find(node => node.id === recommended_id)) {
+                    nodes.push({ id: recommended_id });
+                }
+                links.push({ source: user_id, target: recommended_id });
+            });
 
-        // Add recommended users as nodes and links
-        recommendations.forEach((recommended_id) => {
-          if (!nodes.find((node) => node.id === recommended_id)) {
-            nodes.push({ id: recommended_id });
-          }
-          links.push({ source: user_id, target: recommended_id });
-        });
-
-        // Update the graph with new nodes and links
-        updateGraph();
-      };
+            // Update the graph with new nodes and links
+            updateGraph();
+        };
     </script>
-  </body>
+
+</body>
 </html>
