@@ -14,7 +14,7 @@ user_embeddings = torch.randn(num_users, embedding_dim)
 
 # Example: Pre-computed recommendations (dummy data)
 # Replace this with real model-based recommendations in practice
-def get_recommendations(user_id, top_k=5):
+def get_recommendations(user_id, top_k=3):
     similarities = torch.cosine_similarity(user_embeddings[user_id].unsqueeze(0), user_embeddings)
     recommended_users = similarities.argsort(descending=True)[1:top_k+1].tolist()  # Skip self
     return recommended_users
@@ -31,7 +31,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Send data to frontend
             await websocket.send_json({"user_id": user_id, "recommendations": recommendations})
-            await asyncio.sleep(1)  # Adjust for update frequency
+            await asyncio.sleep(.5)  # Adjust for update frequency
     except Exception as e:
         print(f"Connection closed: {e}")
     finally:
