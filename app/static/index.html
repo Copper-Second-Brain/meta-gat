@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebSocket Example</title>
+  </head>
+  <body>
+    <h1>Simple WebSocket Demo</h1>
+    <p id="status">Connecting to WebSocket...</p>
+    <pre id="recommendations"></pre>
+    <script>
+      let ws = new WebSocket("ws://localhost:8000/ws");
+
+      ws.onopen = function (event) {
+        document.getElementById("status").textContent = "Connected to /ws!";
+      };
+
+      ws.onmessage = function (event) {
+        // If the message is JSON with "all_recommendations", parse & display them:
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.event === "all_recommendations") {
+            document.getElementById("recommendations").textContent =
+              JSON.stringify(msg.data, null, 2);
+          } else {
+            // It's just a string echo or something else
+            console.log("Received:", msg);
+          }
+        } catch (err) {
+          console.log("Received text message:", event.data);
+        }
+      };
+
+      ws.onclose = function (event) {
+        document.getElementById("status").textContent =
+          "WebSocket disconnected.";
+      };
+
+      ws.onerror = function (event) {
+        document.getElementById("status").textContent = "WebSocket error!";
+      };
+    </script>
+  </body>
+</html>
