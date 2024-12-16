@@ -9,12 +9,17 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from tqdm import tqdm
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 
-# Ensure reproducibility
+import matplotlib.pyplot as plt
+
+os.environ['PYTORCH_MPS_ENABLE_FALLBACK']='1'
+
+# Set random seed for reproducibility
 torch.manual_seed(42)
 np.random.seed(42)
+
+
 
 # Function to plot training and validation loss over epochs
 def plot_loss(train_losses, val_losses, save_path='loss_plot.png'):
@@ -39,8 +44,8 @@ def plot_loss(train_losses, val_losses, save_path='loss_plot.png'):
     plt.show()
     print(f"Loss plot saved to {save_path}")
 
-# Load and preprocess data
-def preprocess_data(filepath, sample_size=200000, k=10, random_state=42):
+
+def preprocess_data(filepath, sample_size=10000, k=10, random_state=42):
     """
     Load the dataset, sample a subset, encode categorical features,
     normalize continuous features, and create an optimized edge list.
@@ -108,6 +113,7 @@ def preprocess_data(filepath, sample_size=200000, k=10, random_state=42):
 
     return Data(x=x, edge_index=edge_index), encoders
 
+
 def create_edge_list_vectorized(df, k=10):
     """
     Optimized edge list creation using vectorized operations.
@@ -170,7 +176,6 @@ def create_edge_list_vectorized(df, k=10):
 
     return edge_index
 
-# Define the GNN Model (Unchanged)
 class PatientGNN(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, heads):
         super(PatientGNN, self).__init__()
@@ -186,35 +191,76 @@ class PatientGNN(nn.Module):
         x = self.gcn2(x, edge_index)
         return x
 
-# Define Training Loop
-def train(model, optimizer, criterion, data):
+def train(model, optimizer, criterion, data, device, batch_size=64):
     model.train()
     optimizer.zero_grad()
-    out = model(data.x, data.train_pos_edge_index)
+    
+    # Create mini-batches using random sampling of nodes
+    num_nodes = data.num_nodes
+    indices = torch.randperm(num_nodes)
+    mini_batches = indices.split(batch_size)
+    
+    total_loss = 0
+    for batch in mini_batches:
+        # Select nodes for this mini-batch
+        x_batch = data.x[batch].to(device)
+        
+        # Create a mapping from global to local indices
+        global_to_local = {global_idx.item(): local_idx for local_idx, global_idx in enumerate(batch)}
+        
+        # Filter positive edges for this mini-batch
+        mask_pos = torch.isin(data.train_pos_edge_index[0], batch) & torch.isin(data.train_pos_edge_index[1], batch)
+        pos_edge_index_batch = data.train_pos_edge_index[:, mask_pos].to(device)
+        
+        # Map global indices to local indices for positive edges
+        pos_edge_index_batch = torch.tensor(
+            [[global_to_local[node.item()] for node in pos_edge_index_batch_row]
+             for pos_edge_index_batch_row in pos_edge_index_batch],
+            dtype=torch.long,
+            device=device,
+        )
+        
+        # Filter negative edges for this mini-batch
+        mask_neg = torch.isin(data.train_neg_edge_index[0], batch) & torch.isin(data.train_neg_edge_index[1], batch)
+        neg_edge_index_batch = data.train_neg_edge_index[:, mask_neg].to(device)
+        
+        # Map global indices to local indices for negative edges
+        neg_edge_index_batch = torch.tensor(
+            [[global_to_local[node.item()] for node in neg_edge_index_batch_row]
+             for neg_edge_index_batch_row in neg_edge_index_batch],
+            dtype=torch.long,
+            device=device,
+        )
+        
+        # Forward pass
+        out = model(x_batch, pos_edge_index_batch)
+        
+        # Compute loss
+        pos_src, pos_dst = pos_edge_index_batch
+        neg_src, neg_dst = neg_edge_index_batch
+        
+        pos_out_src = out[pos_src]
+        pos_out_dst = out[pos_dst]
+        neg_out_src = out[neg_src]
+        neg_out_dst = out[neg_dst]
+        
+        # Compute similarity scores
+        pos_scores = (pos_out_src * pos_out_dst).sum(dim=-1)
+        neg_scores = (neg_out_src * neg_out_dst).sum(dim=-1)
+        
+        # Compute loss
+        pos_loss = -torch.log(torch.sigmoid(pos_scores) + 1e-15).mean()
+        neg_loss = -torch.log(1 - torch.sigmoid(neg_scores) + 1e-15).mean()
+        loss = pos_loss + neg_loss
+        total_loss += loss.item()
+        
+        # Backward pass
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+    
+    return total_loss / len(mini_batches)  # Return average loss for the mini-batch
 
-    # Ensure indices are long tensors
-    pos_src = data.train_pos_edge_index[0]
-    pos_dst = data.train_pos_edge_index[1]
-    neg_src = data.train_neg_edge_index[0]
-    neg_dst = data.train_neg_edge_index[1]
-
-    pos_out_src = out[pos_src]
-    pos_out_dst = out[pos_dst]
-    neg_out_src = out[neg_src]
-    neg_out_dst = out[neg_dst]
-
-    # Compute similarity scores
-    pos_scores = (pos_out_src * pos_out_dst).sum(dim=-1)
-    neg_scores = (neg_out_src * neg_out_dst).sum(dim=-1)
-
-    # Compute loss
-    pos_loss = -torch.log(torch.sigmoid(pos_scores) + 1e-15).mean()
-    neg_loss = -torch.log(1 - torch.sigmoid(neg_scores) + 1e-15).mean()
-    loss = pos_loss + neg_loss
-
-    loss.backward()
-    optimizer.step()
-    return loss.item()
 
 # Evaluation Function
 def evaluate(model, criterion, data, split='val'):
@@ -321,27 +367,27 @@ def split_edges(data, val_ratio=0.05, test_ratio=0.05, random_state=42):
 
     return data
 
-# Main Execution
 def main():
+    
     # Filepath to dataset
-    filepath = '~/Git/college/gat-dataset/SynDisNet.csv'  # Update this path as needed
+    filepath = 'datasets/SynDisNet.csv'  # Update this path as needed
 
     # Set device to CUDA if available, else MPS or CPU
     if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available():
-        device = torch.device("mps")
+        device = torch.device("cpu")
     else:
         device = torch.device("cpu")
     print(f"Using device: {device}")
 
     # Preprocess data and create Data object with sampling
-    sample_size = 200000  # Number of samples to select
+    sample_size = 64000  # Number of samples to select
     k = 10  # Number of neighbors per node
     data, encoders = preprocess_data(filepath, sample_size=sample_size, k=k)
 
     # Split edges into train, val, and test
-    data = split_edges(data, val_ratio=0.05, test_ratio=0.05, random_state=42)
+    data = split_edges(data, val_ratio=0.1, test_ratio=0.1, random_state=42)
     print("Edge splits:")
     print(f"Train edges: {data.train_pos_edge_index.size(1)}")
     print(f"Validation edges: {data.val_pos_edge_index.size(1)}")
@@ -359,24 +405,25 @@ def main():
     print("Initializing model...")
     model = PatientGNN(in_channels=in_channels, hidden_channels=hidden_channels, out_channels=out_channels, heads=heads)
     model = model.to(device)
-
+    
     # Optimizer and Loss Function
     optimizer = optim.Adam(model.parameters(), lr=0.001)
     criterion = nn.MSELoss()  # Alternatively, use a different loss based on your task
 
     # Training loop with progress bar
-    epochs = 200
+    epochs = 100
     best_val_loss = float('inf')
-    patience = 20
+    patience = 20000
     counter = 0
-
+    
     # Lists to store loss values for plotting
     train_losses = []
     val_losses = []
 
     print("Starting training...")
     for epoch in tqdm(range(epochs), desc="Training Progress", unit="epoch"):
-        loss = train(model, optimizer, criterion, data)
+        loss = train(model, optimizer, criterion, data, device=device, batch_size=64)
+
         train_losses.append(loss)
 
         # Evaluate on validation set
@@ -398,7 +445,7 @@ def main():
         if counter >= patience:
             print("Early stopping triggered.")
             break
-
+    
     # Load the best model
     print("Loading the best model...")
     model.load_state_dict(torch.load('best_model.pth'))
@@ -414,7 +461,6 @@ def main():
 
     recommended_patients = recommend_similar_patients(model, data, patient_id, top_k=5)
     print(f"Recommended patients for patient {patient_id}: {recommended_patients.tolist()}")
-
     # Plot training and validation loss over epochs
     plot_loss(train_losses, val_losses, save_path='loss_plot.png')
 
