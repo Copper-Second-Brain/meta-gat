@@ -1,5 +1,8 @@
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Form
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 import torch
 import torch.nn as nn
 from torch_geometric.data import Data
@@ -9,6 +12,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 import os
+from typing import Optional
+from pydantic import BaseModel
 
 class PatientGNN(nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, heads):
@@ -76,8 +81,11 @@ def preprocess_data(filepath, sample_size=50, k=10, random_state=42):
     # Normalize continuous
     continuous_cols = ['systolic_bp', 'diastolic_bp', 'cholesterol', 'BMI', 'heart_rate', 'blood_glucose']
     scaler = StandardScaler()
+    scalers = {}
     for col in continuous_cols:
+        scaler = StandardScaler()
         df_sampled[col] = scaler.fit_transform(df_sampled[[col]])
+        scalers[col] = scaler
 
     if 'patient_id' in df_sampled.columns:
         feature_cols = [col for col in df_sampled.columns if col != 'patient_id']
@@ -87,7 +95,7 @@ def preprocess_data(filepath, sample_size=50, k=10, random_state=42):
 
     edge_index = create_edge_list_vectorized(df_sampled, k=k)
     data = Data(x=x, edge_index=edge_index)
-    return data, df_sampled, encoders
+    return data, df_sampled, encoders, scalers
 
 def recommend_similar_patients(model, data, patient_id, top_k=5):
     model.eval()
@@ -98,30 +106,102 @@ def recommend_similar_patients(model, data, patient_id, top_k=5):
         recommended_patients = similarities.argsort(descending=True)[1: top_k + 1]
     return recommended_patients
 
+def predict_disease(model, data, patient_features, df_full, disease_mapping, scalers):
+    """
+    Predict disease based on patient features by finding the most similar patients in the dataset.
+    """
+    model.eval()
+    
+    # Normalize continuous features using stored scalers
+    continuous_cols = ['systolic_bp', 'diastolic_bp', 'cholesterol', 'BMI', 'heart_rate', 'blood_glucose']
+    normalized_features = patient_features.copy()
+    
+    for col in continuous_cols:
+        if col in patient_features and col in scalers:
+            # Reshape to 2D array as expected by transform
+            value = np.array([[patient_features[col]]])
+            normalized_value = scalers[col].transform(value)[0][0]
+            normalized_features[col] = normalized_value
+    
+    # Create a feature vector that matches the format of the training data
+    feature_cols = [col for col in df_full.columns if col != 'patient_id']
+    feature_vector = []
+    for col in feature_cols:
+        if col in normalized_features:
+            feature_vector.append(normalized_features[col])
+        else:
+            # Use a default value if the feature is missing
+            feature_vector.append(0.0)
+    
+    # Convert to tensor and ensure correct shape
+    new_patient_features = torch.tensor([feature_vector], dtype=torch.float)
+    
+    # Get embeddings for all patients in the dataset
+    with torch.no_grad():
+        all_embeddings = model(data.x, data.edge_index)
+        
+        # Get embedding for the new patient
+        # Note: We can't directly get an embedding without connecting the patient to the graph
+        # Instead, we'll find the most similar patient based on feature similarity
+        similarities = []
+        for i in range(data.x.size(0)):
+            sim = torch.cosine_similarity(new_patient_features, data.x[i].unsqueeze(0))
+            similarities.append(sim.item())
+        
+        # Find the most similar patients
+        top_indices = np.argsort(similarities)[::-1][:5]  # Top 5 most similar
+        
+        # Get the diseases of the most similar patients
+        disease_predictions = []
+        for idx in top_indices:
+            disease_id = int(df_full.iloc[idx]['disease'])
+            disease_name = disease_mapping[disease_id]
+            disease_family = df_full.iloc[idx]['disease_family']
+            similarity = similarities[idx]
+            disease_predictions.append({
+                'disease': disease_name,
+                'disease_family': disease_family,
+                'similarity': similarity
+            })
+        
+        return disease_predictions
+
+# Initialize FastAPI app
 app = FastAPI()
 
+# Create necessary directories first
+os.makedirs("templates", exist_ok=True)
+os.makedirs("static", exist_ok=True)
+
+# For templating HTML pages
+templates = Jinja2Templates(directory="templates")
+
+# For static files like CSS, JS
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Global variables
 model = None
 data = None
 df_small = None
 encoders = {}
+scalers = {}
 recommendations_log = {}
 mappings = {}  # Will store string mappings for disease, disease_family, etc.
 
 @app.on_event("startup")
 async def startup_event():
-    global model, data, df_small, encoders, recommendations_log, mappings
+    global model, data, df_small, encoders, scalers, recommendations_log, mappings
     print("=== Startup: loading data and model ===")
 
     dataset_path = os.path.join("datasets", "SynDisNet.csv")
     best_model_path = "best_model.pth"
 
     # Load small sample of data + encoders
-    data, df_small, encoders = preprocess_data(dataset_path, sample_size=50, k=10, random_state=42)
+    data, df_small, encoders, scalers = preprocess_data(dataset_path, sample_size=50, k=10, random_state=42)
     num_nodes = data.num_nodes
     print(f"Data loaded. Number of nodes: {num_nodes}")
 
     # Build mappings from numeric -> original label (for disease, disease_family)
-    # (Only if you originally had those columns in your CSV)
     disease_encoder = encoders["disease"]   # LabelEncoder for 'disease'
     disease_mapping = { i: disease_encoder.classes_[i] for i in range(len(disease_encoder.classes_)) }
 
@@ -139,7 +219,7 @@ async def startup_event():
     out_channels = 32
     heads = 4
     model = PatientGNN(in_channels, hidden_channels, out_channels, heads)
-    model.load_state_dict(torch.load(best_model_path))
+    model.load_state_dict(torch.load(best_model_path, map_location=torch.device('cpu')))
     model.eval()
     print("Model loaded from best_model.pth.")
 
@@ -151,7 +231,7 @@ async def startup_event():
         # Retrieve the 'patient_id, disease_family, disease' for this source node
         source_row = df_small.iloc[pid]
         source_features = {
-            "patient_id": source_row["patient_id"],
+            "patient_id": source_row["patient_id"] if "patient_id" in source_row else pid,
             "disease_family": int(source_row["disease_family"]),
             "disease": int(source_row["disease"])
         }
@@ -161,7 +241,7 @@ async def startup_event():
         for rec_id in recs.tolist():
             rec_row = df_small.iloc[rec_id]
             recs_list.append({
-                "patient_id": rec_row["patient_id"],
+                "patient_id": rec_row["patient_id"] if "patient_id" in rec_row else rec_id,
                 "disease_family": int(rec_row["disease_family"]),
                 "disease": int(rec_row["disease"])
             })
@@ -173,6 +253,58 @@ async def startup_event():
 
     print("Precomputed recommendations, plus built string mappings.")
     print("=== Startup complete ===")
+
+# Route for the main page
+@app.get("/", response_class=HTMLResponse)
+async def get_index(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+# Route for the disease finder form (GET)
+@app.get("/find", response_class=HTMLResponse)
+async def get_find_form(request: Request):
+    return templates.TemplateResponse("find.html", {
+        "request": request,
+        "results": None,
+        "mappings": mappings
+    })
+
+# Route for the disease finder form (POST)
+@app.post("/find", response_class=HTMLResponse)
+async def post_find_disease(
+    request: Request,
+    systolic_bp: float = Form(...),
+    diastolic_bp: float = Form(...),
+    cholesterol: float = Form(...),
+    BMI: float = Form(...),
+    heart_rate: float = Form(...),
+    blood_glucose: float = Form(...),
+    fatigue_severity: int = Form(...),
+    cough_type: int = Form(...),
+    chest_pain: int = Form(...),
+    smoking_status: int = Form(...)
+):
+    # Create a dictionary with the patient features
+    patient_features = {
+        'systolic_bp': systolic_bp,
+        'diastolic_bp': diastolic_bp,
+        'cholesterol': cholesterol,
+        'BMI': BMI,
+        'heart_rate': heart_rate,
+        'blood_glucose': blood_glucose,
+        'fatigue_severity': fatigue_severity,
+        'cough_type': cough_type,
+        'chest_pain': chest_pain,
+        'smoking_status': smoking_status
+    }
+    
+    # Use the model to predict the disease
+    results = predict_disease(model, data, patient_features, df_small, mappings['disease'], scalers)
+    
+    return templates.TemplateResponse("find.html", {
+        "request": request,
+        "results": results,
+        "mappings": mappings
+    })
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
