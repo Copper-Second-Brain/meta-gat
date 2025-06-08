@@ -10,7 +10,8 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
         }
 
         body {
@@ -179,7 +180,7 @@
 </head>
 
 <body>
-    <aa href="/">
+    <a href="/">
         <div class="backBtnContainer">
             <svg fill="#000000" height="20px" width="20px" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg"
                 xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 26.676 26.676" xml:space="preserve">
@@ -208,103 +209,100 @@
             </svg>
             <button class="homeBtn">Back to Home</button>
         </div>
-        </a>
-        <h1>Find Possible Disease</h1>
-        <form id="disease-finder-form" action="/find" method="post">
-            <div class="form-group">
-                <label for="systolic_bp">Systolic Blood Pressure:</label>
-                <input type="number" id="systolic_bp" name="systolic_bp" required placeholder="e.g., 120">
-            </div>
-
-            <div class="form-group">
-                <label for="diastolic_bp">Diastolic Blood Pressure:</label>
-                <input type="number" id="diastolic_bp" name="diastolic_bp" required placeholder="e.g., 80">
-            </div>
-
-            <div class="form-group">
-                <label for="cholesterol">Cholesterol:</label>
-                <input type="number" id="cholesterol" name="cholesterol" required placeholder="e.g., 200">
-            </div>
-
-            <div class="form-group">
-                <label for="BMI">BMI:</label>
-                <input type="number" id="BMI" name="BMI" step="0.1" required placeholder="e.g., 24.5">
-            </div>
-
-            <div class="form-group">
-                <label for="heart_rate">Heart Rate:</label>
-                <input type="number" id="heart_rate" name="heart_rate" required placeholder="e.g., 72">
-            </div>
-
-            <div class="form-group">
-                <label for="blood_glucose">Blood Glucose:</label>
-                <input type="number" id="blood_glucose" name="blood_glucose" required placeholder="e.g., 100">
-            </div>
-
-            <div class="form-group">
-                <label for="fatigue_severity">Fatigue Severity (0-3):</label>
-                <select id="fatigue_severity" name="fatigue_severity">
-                    <option value="0">None (0)</option>
-                    <option value="1">Mild (1)</option>
-                    <option value="2">Moderate (2)</option>
-                    <option value="3">Severe (3)</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="cough_type">Cough Type:</label>
-                <select id="cough_type" name="cough_type">
-                    <option value="0">None</option>
-                    <option value="1">Dry</option>
-                    <option value="2">Productive</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="chest_pain">Chest Pain:</label>
-                <select id="chest_pain" name="chest_pain">
-                    <option value="0">No</option>
-                    <option value="1">Yes</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="smoking_status">Smoking Status:</label>
-                <select id="smoking_status" name="smoking_status">
-                    <option value="0">Non-smoker</option>
-                    <option value="1">Smoker</option>
-                </select>
-            </div>
-
-            <button type="submit" class="button">Find Disease</button>
-        </form>
-
-
-        <div id="results">
-            {% if results %}
-            <h2>Possible Diseases</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Disease</th>
-                        <th>Disease Family</th>
-                        <th>Similarity</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for result in results %}
-                    <tr>
-                        <td>{{ result.disease }}</td>
-                        <td>{{ mappings.disease_family[result.disease_family] }}</td>
-                        <td>{{ "%.2f"|format(result.similarity) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% endif %}
-
+    </a>
+    <h1>Find Possible Disease</h1>
+    <form id="disease-finder-form" action="/find" method="post">
+        <div class="form-group">
+            <label for="systolic_bp">Systolic Blood Pressure:</label>
+            <input type="number" id="systolic_bp" name="systolic_bp" required placeholder="e.g., 120" />
         </div>
 
+        <div class="form-group">
+            <label for="diastolic_bp">Diastolic Blood Pressure:</label>
+            <input type="number" id="diastolic_bp" name="diastolic_bp" required placeholder="e.g., 80" />
+        </div>
+
+        <div class="form-group">
+            <label for="cholesterol">Cholesterol:</label>
+            <input type="number" id="cholesterol" name="cholesterol" required placeholder="e.g., 200" />
+        </div>
+
+        <div class="form-group">
+            <label for="BMI">BMI:</label>
+            <input type="number" id="BMI" name="BMI" step="0.1" required placeholder="e.g., 24.5" />
+        </div>
+
+        <div class="form-group">
+            <label for="heart_rate">Heart Rate:</label>
+            <input type="number" id="heart_rate" name="heart_rate" required placeholder="e.g., 72" />
+        </div>
+
+        <div class="form-group">
+            <label for="blood_glucose">Blood Glucose:</label>
+            <input type="number" id="blood_glucose" name="blood_glucose" required placeholder="e.g., 100" />
+        </div>
+
+        <div class="form-group">
+            <label for="fatigue_severity">Fatigue Severity (0-3):</label>
+            <select id="fatigue_severity" name="fatigue_severity">
+                <option value="0">None (0)</option>
+                <option value="1">Mild (1)</option>
+                <option value="2">Moderate (2)</option>
+                <option value="3">Severe (3)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="cough_type">Cough Type:</label>
+            <select id="cough_type" name="cough_type">
+                <option value="0">None</option>
+                <option value="1">Dry</option>
+                <option value="2">Productive</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="chest_pain">Chest Pain:</label>
+            <select id="chest_pain" name="chest_pain">
+                <option value="0">No</option>
+                <option value="1">Yes</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="smoking_status">Smoking Status:</label>
+            <select id="smoking_status" name="smoking_status">
+                <option value="0">Non-smoker</option>
+                <option value="1">Smoker</option>
+            </select>
+        </div>
+
+        <button type="submit" class="button">Find Disease</button>
+    </form>
+
+    <div id="results">
+        {% if results %}
+        <h2>Possible Diseases</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Disease</th>
+                    <th>Disease Family</th>
+                    <th>Similarity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for result in results %}
+                <tr>
+                    <td>{{ result.disease }}</td>
+                    <td>{{ mappings.disease_family[result.disease_family] }}</td>
+                    <td>{{ "%.2f"|format(result.similarity) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    </div>
 </body>
 
 </html>
